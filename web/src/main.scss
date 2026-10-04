@@ -1,0 +1,781 @@
+@use '@/assets/gradients.scss' as gradients;
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('@/assets/Montserrat-VariableFont_wght.ttf');
+}
+
+@property --color-dim {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fff;
+}
+
+@property --intr-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fff;
+}
+
+@property --intr-gradient-start {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fff;
+}
+
+@property --intr-gradient-end {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --intr-gradient-start_internal {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fff;
+}
+
+@property --intr-gradient-end_internal {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --intr-gradient-size {
+  syntax: "<percentage>+ | closest-side | closest-corner | farthest-side | farthest-corner";
+  inherits: true;
+  initial-value: 50% 100%;
+}
+
+@property --intr-gradient-x {
+  syntax: "<length-percentage> | left | right | center";
+  inherits: true;
+  initial-value: center;
+}
+
+@property --intr-gradient-y {
+  syntax: "<length-percentage> | top | bottom | center";
+  inherits: true;
+  initial-value: bottom;
+}
+
+:root {
+  color-scheme: dark;
+  --sidebar-width: 340px;
+  --content-gutter: 20px;
+  --hue-cold: 264;
+  --hue-warm: 53;
+  --color-accent: #58f;
+  --color-accent-hover: color-mix(in oklab, var(--color-accent) 85%, var(--color-6));
+  --color-accent-pressed: color-mix(in oklab, var(--color-accent) 75%, var(--color-0));
+  --color-accent-suppl: color-mix(in oklab, var(--color-accent) 75%, var(--color-6));
+  --color-danger: #e93461;
+  --color-alert: #ffcf01;
+  --color-success: #11ff77;
+  --color-0: #0d1011;
+  --color-1: #161820;
+  --color-2: #292c3a;
+  --color-3: #3f465d;
+  --color-4: #7f8eb4;
+  --color-5: #b1bfe0;
+  --color-6: #e0ebf7;
+  --color-7: #ffffff;
+  --color-0-alt: #0e1215;
+  --color-dim: var(--color-4);
+  --color-em: color-mix(in srgb, var(--color-5) 75%, var(--color-6));
+  --font-family: Montserrat, 'Noto Sans CJK SC', Arial, sans-serif;
+  --checkerboard: conic-gradient(
+    var(--color-2) 0.25turn,
+    var(--color-1) 0.25turn 0.5turn,
+    var(--color-2) 0.5turn 0.75turn,
+    var(--color-1) 0.75turn
+  ) top left / 16px 16px repeat;
+  height: 100%;
+  background-color: var(--color-0);
+  color: var(--color-5);
+  font-size: 14px;
+}
+
+body {
+  margin: 0 !important;
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+  background-color: var(--color-0);
+  font-family: var(--font-family);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+h1 {
+  color: var(--color-6);
+  font-weight: 300;
+  font-size: 3rem;
+  margin-bottom: 0.25rem;
+}
+
+h2 {
+  color: var(--color-6);
+  font-weight: 400;
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+h3 {
+  color: var(--color-6);
+  font-weight: 400;
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+/* MARK: Naive UI */
+
+body {
+  --n-primary-color: var(--color-accent) !important;
+  font-family: var(--font-family) !important;
+}
+
+.n-config-provider {
+  display: contents;
+}
+
+.n-layout-sider {
+  background-color: transparent !important;
+}
+
+.n-tooltip {
+  pointer-events: none !important;
+}
+
+.n-card {
+  background-color: var(--color-1) !important;
+  color: inherit;
+  border-color: rgb(from var(--color-5) r g b / 0.1) !important;
+  border-radius: 6px !important;
+
+  :root.light-color-scheme & {
+    border-color: var(--color-2) !important;
+  }
+}
+
+.n-popover:not(.n-tooltip) {
+  background-color: var(--color-1) !important;
+  color: inherit;
+  border: 1px solid rgb(from var(--color-5) r g b / 0.1) !important;
+  border-radius: 6px !important;
+
+  :root.light-color-scheme & {
+    border-color: var(--color-2) !important;
+  }
+}
+
+.n-dropdown {
+  --n-color: var(--color-1) !important;
+  --n-border-radius: 6px !important;
+  --n-option-text-color: var(--color-5) !important;
+  --n-option-text-color-hover: var(--color-6) !important;
+  --n-option-color-hover: rgb(from var(--color-accent) r g b / 0.15) !important;
+
+  border: 1px solid rgb(from var(--color-5) r g b / 0.1) !important;
+  user-select: none;
+
+  :root.light-color-scheme & {
+    border-color: var(--color-2) !important;
+  }
+}
+
+.n-card-header {
+  padding: 4px !important;
+  font-size: 12px !important;
+  line-height: 22px;
+  align-items: flex-start !important;
+
+  &>.n-card-header__main {
+    padding-left: 8px;
+    font-weight: 600 !important;
+    color: var(--color-4) !important;
+    user-select: none;
+  }
+
+  .n-card-header__close {
+    margin-right: 2px !important;
+    color: var(--color-5) !important;
+
+    &:hover {
+      color: var(--color-6) !important;
+
+      &::before {
+        background-color: var(--color-2) !important;
+      }
+    }
+  }
+}
+
+.n-list, .n-layout, .n-layout-header {
+  background-color: transparent !important;
+}
+
+.n-list-item {
+  padding: 12px 12px 12px 16px !important;
+  transition: none !important;
+}
+
+.n-thing-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.n-thing-header__title, .n-thing-main__description {
+  line-height: 1em;
+  transition: none !important;
+}
+
+.n-thing-header__title {
+  color: var(--color-5) !important;
+  user-select: none;
+
+  &>* {
+    white-space: pre;
+    text-overflow: ellipsis;
+  }
+}
+
+.n-thing-main__description {
+  color: var(--color-4) !important;
+  font-weight: 500;
+  user-select: none;
+}
+
+.n-tag {
+  user-select: none !important;
+  font-weight: 600;
+  text-shadow: 0 1px 1px #000;
+  display: inline-flex;
+  justify-content: center;
+
+  :root.light-color-scheme & {
+    text-shadow: none;
+  }
+}
+
+.n-progress-graph-line-fill {
+  transition: none !important;
+}
+
+.n-switch {
+  --n-button-color: var(--color-4) !important;
+
+  :root.light-color-scheme & {
+    --n-button-color: var(--color-0) !important;
+  }
+
+  &.n-switch--active {
+    --n-button-color: var(--color-6) !important;
+
+    :root.light-color-scheme & {
+      --n-button-color: var(--color-1) !important;
+    }
+  }
+}
+
+.n-radio-group {
+  display: contents !important;
+}
+
+.n-radio__label {
+  color: inherit !important;
+  font-weight: 500 !important;
+}
+
+.n-radio__dot-wrapper,
+.n-checkbox-box-wrapper {
+  padding: 0 8px;
+}
+
+.n-radio__dot,
+.n-checkbox-box {
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.n-radio__dot-wrapper + .n-radio__label,
+.n-checkbox-box-wrapper + .n-checkbox__label {
+  padding-left: 0;
+}
+
+.n-base-selection,
+.n-base-select-option,
+.n-radio,
+.n-radio-button,
+.n-checkbox,
+.n-button,
+.n-switch,
+.n-tabs-nav {
+  user-select: none;
+}
+
+.n-base-selection-input,
+.n-input,
+.n-input-number {
+  user-select: auto;
+}
+
+.n-tabs-tab {
+  user-select: none !important;
+
+  &>.n-tabs-tab__label {
+    font-weight: 500 !important;
+  }
+}
+
+.n-switch.n-switch--active .n-switch__rail {
+  background-color: var(--color-accent);
+}
+
+.n-button:not(.n-input-number .n-button) {
+  --intr-color: var(--color-4);
+  --intr-color-fade: color-mix(
+    in oklch,
+    var(--intr-color),
+    oklch(from var(--intr-color) l calc(max(c, 0.2) * 2) var(--hue-cold))
+  );
+  --intr-gradient-start-alpha: 0.75;
+  --intr-gradient-start: rgb(from var(--intr-color) r g b / calc(alpha * var(--intr-gradient-start-alpha)));
+  --intr-gradient-end-alpha: 0.1;
+  --intr-gradient-end: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+  --intr-gradient-size: 50% 100%;
+  --intr-gradient-x: 50%;
+  --intr-gradient-y: 100%;
+  --intr-gradient-start_internal: var(--intr-gradient-start);
+  --intr-gradient-end_internal: var(--intr-gradient-end);
+  box-shadow: none;
+  text-transform: none;
+  background-color: rgb(from var(--color-2) r g b / 0.2) !important;
+  background-image: radial-gradient(
+    var(--intr-gradient-size) at var(--intr-gradient-x) var(--intr-gradient-y) in oklch,
+    gradients.scrim(var(--intr-gradient-start_internal), var(--intr-gradient-end_internal))
+  );
+  border: 1px solid rgb(from var(--intr-color) calc(1.2 * r) calc(1.2 * g) calc(1.2 * b) / 0.2) !important;
+  transition:
+    --intr-gradient-start_internal 100ms,
+    --intr-gradient-end_internal 100ms,
+    --intr-gradient-size 100ms,
+    --intr-gradient-x 100ms,
+    --intr-gradient-y 100ms,
+    box-shadow 200ms,
+    color 200ms;
+  border-radius: 6px;
+  color: var(--color-6);
+  text-shadow: 0 1px 2px #000;
+
+  :root.light-color-scheme & {
+    --intr-color: var(--color-3);
+    --intr-gradient-start-alpha: 0.2;
+    --intr-gradient-end-alpha: 0;
+    --intr-gradient-end: rgb(from var(--intr-color) r g b / calc(alpha * var(--intr-gradient-start-alpha)));
+    --intr-gradient-start: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+    text-shadow: none;
+
+    svg {
+      filter: none;
+    }
+  }
+
+  .faded {
+    color: var(--color-5);
+    transition: color 200ms;
+  }
+
+  &>.n-button__border,&>.n-button__state-border {
+    display: none !important;
+  }
+
+  svg {
+    filter: drop-shadow(0 1px 2px #000);
+  }
+
+  &.icon {
+    --v-btn-size: 0.875rem !important;
+    --intr-gradient-size: 50% 50%;
+    --intr-gradient-y: 50%;
+    border-radius: 50% !important;
+    border-radius: 50%;
+
+    &.selected {
+      --intr-gradient-start_internal: var(--intr-gradient-end);
+      --intr-gradient-end_internal: var(--intr-gradient-start);
+    }
+  }
+
+  &:hover:not(.readonly):not([disabled]:not([disabled='false'])),
+  &.selected,
+  :where(.hover-parent:hover) &:not(.readonly):not([disabled]:not([disabled='false'])) {
+    --intr-gradient-start: var(--intr-color);
+    --intr-gradient-size: 75% 150%;
+    box-shadow: 0 0 8px rgb(from var(--intr-color) calc(1.2 * r) calc(1.2 * g) calc(1.2 * b) / 0.333);
+    color: var(--color-7);
+
+    :root.light-color-scheme & {
+      --intr-gradient-start-alpha: 0.1;
+      --intr-gradient-end-alpha: 0;
+      --intr-gradient-end: rgb(from var(--intr-color) r g b / calc(alpha * var(--intr-gradient-start-alpha)));
+      --intr-gradient-start: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+    }
+
+    .faded {
+      color: var(--color-6);
+    }
+
+    &.icon {
+      --intr-gradient-size: 75% 75%;
+    }
+  }
+
+  &[disabled]:not([disabled='false']) {
+    cursor: default;
+    pointer-events: all;
+    --intr-color: color-mix(in srgb,var(--color-4) 20%,var(--color-2));
+    --intr-gradient-size: 0% 0%;
+    color: var(--color-4);
+  }
+
+  &.accent {
+    --n-ripple-color: var(--color-accent) !important;
+    --intr-color: var(--color-accent);
+    --intr-gradient-start: var(--intr-color);
+    --intr-gradient-end-alpha: 0.15;
+    border: 1px solid rgb(from var(--intr-color) calc(1.2 * r) calc(1.2 * g) calc(1.2 * b) / 0.3) !important;
+    background-color: rgb(from var(--color-0) r g b / 1) !important;
+
+    :root.light-color-scheme & {
+      --intr-gradient-start-alpha: 0.4;
+      --intr-gradient-end-alpha: 0.1;
+      --intr-gradient-end: rgb(from var(--color-accent) r g b / var(--intr-gradient-start-alpha));
+      --intr-gradient-start: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+    }
+
+    &:hover:not(.readonly):not([disabled]),&.selected,:where(.hover-parent:hover) &:not(.readonly):not([disabled]) {
+      --intr-color: oklch(from var(--color-accent) l calc(c * 1.3) h);
+
+      :root.light-color-scheme & {
+        --intr-gradient-end-alpha: 0;
+        --intr-gradient-end: rgb(from var(--color-accent) r g b / calc(alpha * 0.4));
+        --intr-gradient-start: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+      }
+    }
+
+    &[disabled]:not([disabled='false']) {
+      --intr-color: color-mix(in srgb,var(--color-accent) 20%,var(--color-2));
+    }
+  }
+
+  &.danger {
+    --n-ripple-color: var(--color-danger) !important;
+    --intr-color: var(--color-danger);
+
+    :root.light-color-scheme & {
+      border-color: rgb(from var(--color-danger) r g b / 0.4) !important;
+      --intr-gradient-start-alpha: 0.3;
+      --intr-gradient-end-alpha: 0.1;
+      --intr-gradient-end: oklch(from var(--color-danger) calc(l * 2) calc(c * 1.5) h / var(--intr-gradient-start-alpha));
+      --intr-gradient-start: oklch(from var(--color-danger) calc(l * 2) calc(c * 1.5) h / calc(alpha * var(--intr-gradient-end-alpha)));
+    }
+
+    &:hover:not(.readonly):not([disabled]),&.selected {
+      --intr-color: color-mix(in oklch, oklch(from var(--color-danger) l calc(max(c, 0.05) * 1.5) var(--hue-warm)) 33%, var(--color-danger));
+
+      :root.light-color-scheme & {
+        --intr-gradient-start-alpha: 0.3;
+        --intr-gradient-end-alpha: 0.1;
+        --intr-gradient-end: oklch(from var(--color-danger) l calc(max(c, 0.05) * 1.5) var(--hue-warm) / var(--intr-gradient-start-alpha));
+        --intr-gradient-start: oklch(from var(--color-danger) l calc(max(c, 0.05) * 1.5) var(--hue-warm) / calc(alpha * var(--intr-gradient-end-alpha)));
+      }
+    }
+
+    &[disabled]:not([disabled='false']) {
+      --intr-color: color-mix(in srgb,var(--color-danger) 20%,var(--color-2));
+    }
+
+    &.attention {
+      animation: danger-attention 1s infinite;
+
+      @keyframes danger-attention {
+        0%, 100% {
+          --intr-color: var(--color-danger);
+          --intr-gradient-size: 50% 50%;
+          box-shadow: 0 0 8px transparent;
+        }
+        50% {
+          --intr-color: color-mix(in oklch, oklch(from var(--color-danger) l calc(max(c, 0.05) * 1.5) var(--hue-warm)) 33%, var(--color-danger));
+          --intr-gradient-size: 75% 75%;
+          box-shadow: 0 0 8px rgb(from var(--intr-color) calc(1.2 * r) calc(1.2 * g) calc(1.2 * b) / 0.333);
+        }
+      }
+    }
+  }
+
+  &.success {
+    --n-ripple-color: var(--color-success) !important;
+    --intr-color: var(--color-success);
+
+    &[disabled]:not([disabled='false']) {
+      --intr-color: color-mix(in srgb,var(--color-success) 20%,var(--color-2));
+    }
+  }
+
+  &.alert {
+    --n-ripple-color: var(--color-alert) !important;
+    --intr-color: var(--color-alert);
+    --intr-color-fade: color-mix(in oklch, oklch(from var(--intr-color) l calc(max(c, 0.2) * 2) var(--hue-warm)) 75%, var(--intr-color));
+
+    &[disabled]:not([disabled='false']) {
+      --intr-color: color-mix(in srgb,var(--color-alert) 20%,var(--color-2));
+    }
+  }
+}
+
+.n-input:not(.n-input-number .n-input) .n-input__suffix {
+  transition: margin-left .25s;
+  margin-right: -9px;
+
+  .n-base-clear {
+    width: fit-content;
+    height: fit-content;
+
+    &>.n-base-clear__clear {
+      width: fit-content;
+      height: fit-content;
+      left: -16px !important;
+    }
+  }
+
+  &:has(.n-base-clear>.n-base-clear__clear:not(.icon-switch-transition-leave-to)) {
+    margin-left: 33px !important;
+  }
+}
+
+.n-tabs.no-tab-padding .n-tab-pane {
+  padding-top: 0 !important;
+}
+
+.n-tabs .n-tabs-nav.n-tabs-nav--line-type.n-tabs-nav--top .n-tabs-nav-scroll-content {
+  border-bottom: 2px solid var(--color-1);
+}
+
+.n-tabs.pad-tab-buttons .n-tabs-nav-scroll-wrapper {
+  padding-left: 12px;
+}
+
+.panel-heading {
+  margin-bottom: 2px;
+  padding-left: 8px;
+  color: var(--color-4);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.image-sides {
+  padding-left: 16px;
+}
+
+.animation-sides {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 48px;
+  padding: 0 12px;
+}
+
+.animation-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .changed {
+    color: var(--color-accent);
+  }
+}
+
+.animation-none {
+  font-size: 12px;
+  color: var(--color-4);
+}
+
+.recipe-diff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 48px;
+  padding: 16px 12px;
+}
+
+.recipe-single {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 12px;
+}
+
+.recipe-note {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recipe-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe-version {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tab-toggles {
+  padding-right: 12px;
+  user-select: none;
+
+  .toggle-count {
+    margin-right: 4px;
+    color: var(--color-accent);
+    font-weight: 600;
+    line-height: 1;
+  }
+}
+
+.n-base-selection__state-border {
+  border: 1px solid var(--color-2) !important;
+
+  .n-base-selection:hover & {
+    border: var(--n-border-hover) !important;
+  }
+
+  .n-base-selection-label:focus~& {
+    border: var(--n-border-focus) !important;
+  }
+}
+
+.n-tabs-nav--bar-type>.n-tabs-nav-scroll-wrapper>.v-x-scroll>.n-tabs-nav-scroll-content>.n-tabs-wrapper {
+  min-width: 100%;
+}
+
+.n-upload-dragger {
+  user-select: none;
+}
+
+.n-popconfirm {
+  box-shadow: 0 4px 16px #000;
+
+  .n-popover-arrow {
+    display: none !important;
+  }
+
+  :root.light-color-scheme & {
+    box-shadow: 0 4px 16px #0002;
+  }
+}
+
+/* MARK: easy-tooltips */
+
+.tooltip {
+  --easy-tooltip-background-color: transparent;
+  --easy-tooltip-border-color: var(--color-2);
+  --easy-tooltip-text-color: var(--color-5);
+  --easy-tooltip-border-size: 2px;
+  --easy-tooltip-distance: 24px;
+  --easy-tooltip-max-width: 600px;
+  --easy-tooltip-border-radius: 6px;
+  --easy-tooltip-delay: 0.3s;
+  --easy-tooltip-distance: 16px;
+  filter: drop-shadow(0 2px 8px #000);
+  font-size: 14px;
+  line-height: 1.3em;
+  font-weight: 500;
+  --tooltip-color: var(--color-accent);
+  --easy-tooltip-background: radial-gradient(
+    farthest-corner at bottom center,
+    #{gradients.scrim(
+      color-mix(in srgb, var(--tooltip-color) 30%, #000),
+      color-mix(in srgb, var(--tooltip-color) 5%, #000)
+    )}
+  );
+  --easy-tooltip-border: radial-gradient(
+    farthest-corner at bottom center,
+    #{gradients.scrim(
+      color-mix(in srgb, var(--tooltip-color), var(--color-2)),
+      color-mix(in srgb, var(--color-3), var(--color-2))
+    )}
+  );
+
+  :root.light-color-scheme & {
+    filter: drop-shadow(0 2px 8px #0002);
+    --easy-tooltip-background: radial-gradient(
+      farthest-corner at bottom center,
+      #{gradients.scrim(
+        #fff,
+        color-mix(in oklch, var(--tooltip-color) 10%, #fff)
+      )}
+    );
+    --easy-tooltip-border: radial-gradient(
+      farthest-corner at bottom center,
+      #{gradients.scrim(
+        color-mix(in srgb, var(--tooltip-color) 25%, #fff),
+        color-mix(in srgb, var(--tooltip-color) 60%, #fff)
+      )}
+    );
+  }
+
+  .easy-tooltip-text {
+    text-shadow: 0 1px 1px #000;
+    text-align: left;
+    font-size: 1.142858em;
+    font-weight: 500;
+    margin: 0;
+    color: var(--color-6);
+
+    :root.light-color-scheme & {
+      text-shadow: none;
+    }
+
+    h3 {
+      font-size: 1em;
+      font-weight: inherit;
+      margin: 12px 0 4px;
+    }
+
+    p,ul,ol {
+      font-size: 0.875em;
+      font-weight: 500;
+      margin: 4px 0;
+      color: var(--color-5);
+    }
+
+    h3:first-child,p:first-child,ul:first-child,ol:first-child {
+      margin-top: 0;
+    }
+
+    h3:last-child,p:last-child,ul:last-child,ol:last-child {
+      margin-bottom: 0;
+    }
+
+    br {
+      margin-top: 12px;
+    }
+  }
+}

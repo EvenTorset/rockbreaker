@@ -1,0 +1,84 @@
+@use 'sass:list';
+
+@function scrim($color1: #000, $color2: #fff, $start: 0%, $end: 100%) {
+  $scrim: (
+    100%: 0,
+    73.8%: 0.19,
+    54.1%: 0.34,
+    38.2%: 0.47,
+    27.8%: 0.565,
+    19.4%: 0.65,
+    12.6%: 0.73,
+    7.5%: 0.802,
+    4.2%: 0.861,
+    2.1%: 0.91,
+    0.8%: 0.952,
+    0.2%: 0.982,
+    0%: 1,
+  );
+  @return _make-gradient-list($scrim, $color1, $color2, $start, $end);
+}
+
+@function symscrim($color1: #000, $color2: #fff, $start: 0%, $end: 100%) {
+  $scrim: (
+    100%: 0,
+    99.9%: 0.009,
+    99.6%: 0.024,
+    98.95%: 0.045,
+    97.9%: 0.0695,
+    96.25%: 0.099,
+    93.7%: 0.135,
+    90.3%: 0.175,
+    86.1%: 0.2175,
+    80.9%: 0.265,
+    72.95%: 0.33,
+    63.1%: 0.405,
+    50%: 0.5,
+    36.9%: 0.595,
+    27.05%: 0.67,
+    19.1%: 0.735,
+    13.9%: 0.7825,
+    9.7%: 0.825,
+    6.3%: 0.865,
+    3.75%: 0.901,
+    2.1%: 0.9305,
+    1.05%: 0.955,
+    0.4%: 0.976,
+    0.1%: 0.991,
+    0%: 1,
+  );
+  @return _make-gradient-list($scrim, $color1, $color2, $start, $end);
+}
+
+@function _make-gradient-list($map, $color1, $color2, $start, $end) {
+  $color-stops: ();
+  @each $key, $mod in $map {
+    $position: calc($mod * ($end - $start) + $start);
+    $new-stop: color-mix(in srgb, $color1 $key, $color2);
+    $color-stops: list.append($color-stops, $new-stop $position, "comma");
+  }
+  @return $color-stops;
+}
+
+@mixin interactive-surface($size: farthest-corner) {
+  --intr-color: transparent;
+  --intr-color-fade: color-mix(
+    in oklch,
+    var(--intr-color),
+    oklch(from var(--intr-color) l calc(max(c, 0.2) * 2) var(--hue-cold))
+  );
+  --intr-gradient-start: rgb(from var(--intr-color) r g b / calc(alpha * 0.75));
+  --intr-gradient-end-alpha: 0.1;
+  --intr-gradient-end: rgb(from var(--intr-color-fade) r g b / calc(alpha * var(--intr-gradient-end-alpha)));
+  --intr-gradient-size: #{$size};
+  --intr-gradient-x: 50%;
+  --intr-gradient-y: 100%;
+  --intr-gradient-start_internal: var(--intr-gradient-start);
+  --intr-gradient-end_internal: var(--intr-gradient-end);
+  background-color: transparent;
+  background-image: radial-gradient(
+    var(--intr-gradient-size) at var(--intr-gradient-x) var(--intr-gradient-y) in oklch,
+    scrim(var(--intr-gradient-start_internal), var(--intr-gradient-end_internal))
+  );
+  background-repeat: no-repeat;
+}
