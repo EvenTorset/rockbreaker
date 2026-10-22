@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@tanstack/vue-virtual": "^3.13.47",
     "@types/express": "^5.0.6",
+    "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.3",
     "@vicons/fluent": "^0.13.0",
     "@vitejs/plugin-vue": "^6.0.9",
@@ -17,7 +19,9 @@
     "@vue/tsconfig": "^0.9.1",
     "easy-tooltips": "^3.5.4",
     "express": "^5.2.1",
+    "markdown-it": "^15.0.3",
     "naive-ui": "^2.45.3",
+    "popupable": "^1.11.0",
     "sass": "^1.105.0",
     "typescript": "^6.0.3",
     "vite": "^8.3.1",

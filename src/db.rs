@@ -8,16 +8,21 @@ use std::{
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 use crate::{
-  state::{generate_host_id, is_valid_id, HostedItem, ItemError, ItemSource, DEFAULT_URL_BASE},
+  context_menu::{default_settings, settings_from_string, settings_to_string, MenuSetting},
+  ignore_rules::{normalize_patterns, IgnoreRules},
+  state::{generate_host_id, is_valid_id, now_millis, HostedItem, ItemError, ItemSource, DEFAULT_URL_BASE},
   token::generate_host_token,
 };
 
 /// Bump this and add a migration step when the schema changes.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 const TOKEN_KEY: &str = "token";
 const URL_BASE_KEY: &str = "url_base";
+const IGNORE_PATTERNS_KEY: &str = "ignore_patterns";
+const RESPECT_GITIGNORE_KEY: &str = "respect_gitignore";
+const CONTEXT_MENU_OPTIONS_KEY: &str = "context_menu_options";
 
 type Result<T> = std::result::Result<T, ItemError>;
 
@@ -82,6 +87,50 @@ impl Database {
     Ok(())
   }
 
+  pub fn ignore_patterns(&self) -> Vec<String> {
+    let text = get_setting(&self.lock(), IGNORE_PATTERNS_KEY).ok().flatten().unwrap_or_default();
+    normalize_patterns(&text.lines().collect::<Vec<_>>())
+  }
+
+  pub fn set_ignore_patterns(&self, patterns: &[String]) -> Result<()> {
+    self.set_setting(IGNORE_PATTERNS_KEY, &patterns.join("\n"))
+  }
+
+  pub fn respect_gitignore(&self) -> bool {
+    get_setting(&self.lock(), RESPECT_GITIGNORE_KEY)
+      .ok()
+      .flatten()
+      .is_none_or(|value| value != "0")
+  }
+
+  pub fn set_respect_gitignore(&self, enabled: bool) -> Result<()> {
+    self.set_setting(RESPECT_GITIGNORE_KEY, if enabled { "1" } else { "0" })
+  }
+
+  pub fn context_menu_options(&self) -> Vec<MenuSetting> {
+    get_setting(&self.lock(), CONTEXT_MENU_OPTIONS_KEY)
+      .ok()
+      .flatten()
+      .map_or_else(default_settings, |text| settings_from_string(&text))
+  }
+
+  pub fn set_context_menu_options(&self, settings: &[MenuSetting]) -> Result<()> {
+    self.set_setting(CONTEXT_MENU_OPTIONS_KEY, &settings_to_string(settings))
+  }
+
+  pub fn ignore_rules(&self) -> IgnoreRules {
+    IgnoreRules::new(&self.ignore_patterns(), self.respect_gitignore())
+  }
+
+  fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+    self.lock().execute(
+      "INSERT INTO settings (key, value) VALUES (?1, ?2)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      params![key, value],
+    )?;
+    Ok(())
+  }
+
   pub fn items(&self) -> Result<Vec<HostedItem>> {
     load_items(&self.lock())
   }
@@ -124,9 +173,10 @@ impl Database {
       },
     };
 
+    let shared_at = now_millis();
     tx.execute(
-      "INSERT INTO hosted_items (id, kind) VALUES (?1, ?2)",
-      params![id, source.kind()],
+      "INSERT INTO hosted_items (id, kind, shared_at) VALUES (?1, ?2, ?3)",
+      params![id, source.kind(), shared_at],
     )?;
     let pk = tx.last_insert_rowid();
     for (position, path) in source.paths().into_iter().enumerate() {
@@ -137,7 +187,7 @@ impl Database {
     }
     tx.commit()?;
 
-    Ok((HostedItem { id, source }, false))
+    Ok((HostedItem { id, source, shared_at: Some(shared_at) }, false))
   }
 
   pub fn remove(&self, id: &str) -> Result<usize> {
@@ -178,6 +228,15 @@ pub fn read_token(path: &Path) -> Option<String> {
   get_setting(&conn, TOKEN_KEY).ok().flatten().filter(|token| !token.is_empty())
 }
 
+pub fn read_context_menu_options(path: &Path) -> Vec<MenuSetting> {
+  let stored = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok().and_then(|conn| {
+    conn.busy_timeout(BUSY_TIMEOUT).ok()?;
+    get_setting(&conn, CONTEXT_MENU_OPTIONS_KEY).ok().flatten()
+  });
+
+  stored.map_or_else(default_settings, |text| settings_from_string(&text))
+}
+
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
   let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
@@ -211,6 +270,16 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
   }
 
+  if version < 2 {
+    // Items shared before this version have no timestamp, so it stays NULL for them rather than pretending.
+    conn.execute_batch(
+      "BEGIN;
+       ALTER TABLE hosted_items ADD COLUMN shared_at INTEGER;
+       PRAGMA user_version = 2;
+       COMMIT;",
+    )?;
+  }
+
   Ok(())
 }
 
@@ -237,7 +306,11 @@ fn load_items(conn: &Connection) -> Result<Vec<HostedItem>> {
 }
 
 fn load_item(conn: &Connection, pk: i64, id: String) -> Result<HostedItem> {
-  let kind: String = conn.query_row("SELECT kind FROM hosted_items WHERE pk = ?1", params![pk], |row| row.get(0))?;
+  let (kind, shared_at): (String, Option<i64>) = conn.query_row(
+    "SELECT kind, shared_at FROM hosted_items WHERE pk = ?1",
+    params![pk],
+    |row| Ok((row.get(0)?, row.get(1)?)),
+  )?;
 
   let mut statement = conn.prepare("SELECT path FROM hosted_item_paths WHERE item_pk = ?1 ORDER BY position")?;
   let mut paths: Vec<PathBuf> = statement
@@ -251,5 +324,5 @@ fn load_item(conn: &Connection, pk: i64, id: String) -> Result<HostedItem> {
     _ => return Err(ItemError::Database(format!("item '{id}' is stored inconsistently"))),
   };
 
-  Ok(HostedItem { id, source })
+  Ok(HostedItem { id, source, shared_at })
 }

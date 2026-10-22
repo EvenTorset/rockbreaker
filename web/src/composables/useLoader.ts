@@ -1,9 +1,5 @@
 import { ref, type Ref } from 'vue'
 
-/**
- * Wraps an async loader with loading/error state. Call `reload()` to (re)run it.
- * If `reload()` is called again before an earlier call finishes, the earlier result is discarded.
- */
 export function useLoader<T>(load: () => Promise<T>) {
   const data = ref<T | null>(null) as Ref<T | null>
   const loading = ref(true)

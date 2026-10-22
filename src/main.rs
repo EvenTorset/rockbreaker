@@ -8,11 +8,15 @@ mod client;
 mod config;
 mod context_menu;
 mod db;
+mod embed;
 mod host;
 mod launcher;
 mod paths;
 mod raw;
 mod resolve;
+mod ignore_rules;
+mod reveal;
+mod search;
 mod selection;
 mod startup;
 mod state;
@@ -45,7 +49,7 @@ fn main() {
 
   match command {
     Command::Help => ui::info(cli::USAGE),
-    Command::Register => match context_menu::register() {
+    Command::Register => match context_menu::register(&db::read_context_menu_options(&paths::db_file_path())) {
       Ok(_) => ui::info("Rockbreaker successfully registered its context submenu in the file explorer."),
       Err(e) => ui::error(&format!("Failed to register the context menu: {e}")),
     },

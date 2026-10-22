@@ -2,17 +2,21 @@ use std::{
   fs, io,
   net::SocketAddr,
   path::{Path, PathBuf},
+  time::UNIX_EPOCH,
 };
 
 use axum::{
-  extract::{ConnectInfo, Path as AxumPath, State},
+  extract::{ConnectInfo, Path as AxumPath, RawQuery, State},
   http::{HeaderMap, StatusCode},
   Json,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  context_menu,
+  context_menu::{self, complete_settings, enabled_options, MenuOption, MenuSetting},
+  ignore_rules::{normalize_patterns, validate_pattern},
+  raw::form_values,
+  search,
   resolve::{resolve_entry, resolve_target, Resolved},
   startup,
   state::{
@@ -39,6 +43,12 @@ pub struct RegisterResponse {
   pub host_id: String,
   pub share_url: String,
   pub reused: bool,
+  #[serde(default = "primary_by_default")]
+  pub primary: bool,
+}
+
+fn primary_by_default() -> bool {
+  true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -68,17 +78,38 @@ pub struct SettingState {
 }
 
 #[derive(Serialize)]
+pub struct MenuOptionDto {
+  id: &'static str,
+  label: &'static str,
+  single_label: &'static str,
+  description: &'static str,
+  enabled: bool,
+}
+
+#[derive(Deserialize)]
+pub struct MenuOptionUpdate {
+  id: String,
+  enabled: bool,
+}
+
+#[derive(Serialize)]
 pub struct SettingsResponse {
   context_menu: SettingState,
+  context_menu_options: Vec<MenuOptionDto>,
   run_on_startup: SettingState,
   url_base: String,
+  ignore_patterns: Vec<String>,
+  respect_gitignore: bool,
 }
 
 #[derive(Deserialize)]
 pub struct SettingsUpdate {
   context_menu: Option<bool>,
+  context_menu_options: Option<Vec<MenuOptionUpdate>>,
   run_on_startup: Option<bool>,
   url_base: Option<String>,
+  ignore_patterns: Option<Vec<String>>,
+  respect_gitignore: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -88,6 +119,7 @@ pub struct DashboardItemDto {
   paths: Vec<String>,
   share_url: String,
   direct_url: String,
+  shared_at: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -99,7 +131,8 @@ pub struct DashboardResponse {
 pub struct DirectoryEntryDto {
   name: String,
   is_dir: bool,
-  size: String,
+  size: Option<u64>,
+  modified: Option<i64>,
   subpath: String,
 }
 
@@ -112,7 +145,8 @@ pub struct ItemDetailResponse {
   file_name: String,
   is_dir: bool,
   is_host: bool,
-  file_size: String,
+  file_size: Option<u64>,
+  modified: Option<i64>,
   subpath: String,
   parent_subpath: Option<String>,
   entries: Option<Vec<DirectoryEntryDto>>,
@@ -150,20 +184,13 @@ fn require_host(headers: &HeaderMap, addr: &SocketAddr, state: &AppState) -> Res
   }
 }
 
-fn format_bytes(bytes: u64) -> String {
-  const KB: u64 = 1024;
-  const MB: u64 = KB * 1024;
-  const GB: u64 = MB * 1024;
+pub(crate) fn modified_millis(metadata: &fs::Metadata) -> Option<i64> {
+  let modified = metadata.modified().ok()?;
 
-  if bytes >= GB {
-    format!("{:.2} GB", bytes as f64 / GB as f64)
-  } else if bytes >= MB {
-    format!("{:.2} MB", bytes as f64 / MB as f64)
-  } else if bytes >= KB {
-    format!("{:.2} kB", bytes as f64 / KB as f64)
-  } else {
-    format!("{} B", bytes)
-  }
+  Some(match modified.duration_since(UNIX_EPOCH) {
+    Ok(since_epoch) => since_epoch.as_millis() as i64,
+    Err(before_epoch) => -(before_epoch.duration().as_millis() as i64),
+  })
 }
 
 fn dashboard_item(url_base: &str, item: &HostedItem) -> DashboardItemDto {
@@ -173,6 +200,7 @@ fn dashboard_item(url_base: &str, item: &HostedItem) -> DashboardItemDto {
     paths: item.source.paths().iter().map(|path| path.to_string_lossy().to_string()).collect(),
     share_url: build_share_url(url_base, item, false),
     direct_url: build_share_url(url_base, item, true),
+    shared_at: item.shared_at,
   }
 }
 
@@ -188,6 +216,73 @@ pub async fn api_dashboard_handler(
 
   Ok(Json(DashboardResponse {
     items: items.iter().map(|item| dashboard_item(&url_base, item)).collect(),
+  }))
+}
+
+#[derive(Serialize)]
+pub struct SearchResponse {
+  entries: Vec<DirectoryEntryDto>,
+  truncated: bool,
+}
+
+pub async fn api_search_root_handler(
+  AxumPath(host_id): AxumPath<String>,
+  RawQuery(query): RawQuery,
+  State(state): State<AppState>,
+) -> Result<Json<SearchResponse>, StatusCode> {
+  run_search(host_id, String::new(), query, state).await
+}
+
+pub async fn api_search_subpath_handler(
+  AxumPath((host_id, subpath)): AxumPath<(String, String)>,
+  RawQuery(query): RawQuery,
+  State(state): State<AppState>,
+) -> Result<Json<SearchResponse>, StatusCode> {
+  run_search(host_id, subpath, query, state).await
+}
+
+async fn run_search(
+  host_id: String,
+  subpath: String,
+  query: Option<String>,
+  state: AppState,
+) -> Result<Json<SearchResponse>, StatusCode> {
+  let needle = form_values(query.unwrap_or_default().as_bytes(), "q")
+    .into_iter()
+    .next()
+    .unwrap_or_default();
+
+  let item = state
+    .db
+    .item(&host_id)
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+  if needle.trim().is_empty() {
+    return Ok(Json(SearchResponse { entries: Vec::new(), truncated: false }));
+  }
+
+  let rules = state.ignore_rules();
+  let allow_external = state.config.allow_external_symlinks;
+
+  let outcome = tokio::task::spawn_blocking(move || search::search(&item, &subpath, &needle, allow_external, &rules))
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+  Ok(Json(SearchResponse {
+    entries: outcome
+      .found
+      .into_iter()
+      .map(|found| DirectoryEntryDto {
+        name: found.name,
+        is_dir: found.is_dir,
+        size: found.size,
+        modified: found.modified,
+        subpath: found.subpath,
+      })
+      .collect(),
+    truncated: outcome.truncated,
   }))
 }
 
@@ -232,7 +327,8 @@ fn fetch_item_detail(
     .ok_or(StatusCode::NOT_FOUND)?;
 
   let allow_external = state.config.allow_external_symlinks;
-  let resolved = resolve_target(&item, &subpath, allow_external).ok_or(StatusCode::NOT_FOUND)?;
+  let rules = state.ignore_rules();
+  let resolved = resolve_target(&item, &subpath, allow_external, &rules).ok_or(StatusCode::NOT_FOUND)?;
 
   let parent_subpath = if !subpath.is_empty() {
     Path::new(&subpath)
@@ -259,7 +355,8 @@ fn fetch_item_detail(
     file_name: viewed_name,
     is_dir: true,
     is_host,
-    file_size: "-".to_string(),
+    file_size: None,
+    modified: None,
     parent_subpath,
     entries: None,
     zip_url: Some(format!("{}?zip=1", raw_url(&item.id, &subpath))),
@@ -282,7 +379,8 @@ fn fetch_item_detail(
         let name = entry_name(path);
         entries.push(DirectoryEntryDto {
           is_dir: metadata.is_dir(),
-          size: if metadata.is_dir() { "-".to_string() } else { format_bytes(metadata.len()) },
+          size: metadata.is_file().then_some(metadata.len()),
+          modified: modified_millis(&metadata),
           subpath: name.clone(),
           name,
         });
@@ -290,8 +388,9 @@ fn fetch_item_detail(
 
       response.entries = Some(entries);
     }
-    Resolved::Path { path, root } if path.is_dir() => {
+    Resolved::Path { path, root, relative } if path.is_dir() => {
       let entries_dir = fs::read_dir(&path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+      let scope = rules.scope_for(&root, &relative);
       let mut entries = Vec::new();
 
       for entry in entries_dir.flatten() {
@@ -301,6 +400,9 @@ fn fetch_item_detail(
 
         let name = entry.file_name().to_string_lossy().to_string();
         let is_entry_dir = resolved.metadata.is_dir();
+        if scope.is_ignored(&entry.file_name(), is_entry_dir) {
+          continue;
+        }
 
         let rel_sub = if response.subpath.is_empty() {
           name.clone()
@@ -311,7 +413,8 @@ fn fetch_item_detail(
         entries.push(DirectoryEntryDto {
           name,
           is_dir: is_entry_dir,
-          size: if is_entry_dir { "-".to_string() } else { format_bytes(resolved.metadata.len()) },
+          size: (!is_entry_dir).then_some(resolved.metadata.len()),
+          modified: modified_millis(&resolved.metadata),
           subpath: rel_sub,
         });
       }
@@ -321,9 +424,10 @@ fn fetch_item_detail(
     Resolved::Path { path, .. } => {
       response.is_dir = false;
       response.zip_url = None;
-      response.file_size = fs::metadata(&path)
-        .map(|m| format_bytes(m.len()))
-        .unwrap_or_else(|_| "Unknown size".to_string());
+      if let Ok(metadata) = fs::metadata(&path) {
+        response.file_size = Some(metadata.len());
+        response.modified = modified_millis(&metadata);
+      }
 
       response.download_url = if response.subpath.is_empty() {
         raw_url(&item.id, &response.file_name)
@@ -355,6 +459,7 @@ pub fn register_item(
     share_url: build_share_url(&state.db.url_base(), &item, direct),
     host_id: item.id,
     reused,
+    primary: true,
   })
 }
 
@@ -417,6 +522,37 @@ pub async fn api_rename_handler(
   Ok(Json(RenameResponse { id: payload.new_id }))
 }
 
+pub async fn api_reveal_handler(
+  AxumPath(host_id): AxumPath<String>,
+  ConnectInfo(addr): ConnectInfo<SocketAddr>,
+  headers: HeaderMap,
+  State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
+  require_host(&headers, &addr, &state)?;
+
+  let item = state
+    .db
+    .item(&host_id)
+    .map_err(item_error)?
+    .ok_or_else(|| item_error(ItemError::NotFound))?;
+
+  let path = match &item.source {
+    ItemSource::File(path) | ItemSource::Directory(path) => path,
+    ItemSource::Collection(_) => {
+      return Err((StatusCode::BAD_REQUEST, "Items made of several paths can't be revealed.".to_string()));
+    }
+  };
+
+  if !path.exists() {
+    return Err((StatusCode::NOT_FOUND, "That path doesn't exist anymore.".to_string()));
+  }
+
+  crate::reveal::reveal(path)
+    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, format!("Could not open the file manager: {error}")))?;
+
+  Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn api_regenerate_token_handler(
   ConnectInfo(addr): ConnectInfo<SocketAddr>,
   headers: HeaderMap,
@@ -430,13 +566,40 @@ pub async fn api_regenerate_token_handler(
   Ok(Json(TokenResponse { token }))
 }
 
+fn parse_menu_options(updates: &[MenuOptionUpdate]) -> Result<Vec<MenuSetting>, String> {
+  let mut settings = Vec::new();
+  for update in updates {
+    let option = MenuOption::from_id(&update.id).ok_or_else(|| format!("'{}' isn't an option of the menu.", update.id))?;
+    settings.push(MenuSetting { option, enabled: update.enabled });
+  }
+
+  let settings = complete_settings(settings);
+  if enabled_options(&settings).is_empty() {
+    return Err("At least one option has to be turned on, or there would be no menu.".to_string());
+  }
+  Ok(settings)
+}
+
 fn current_settings(state: &AppState) -> SettingsResponse {
   let supported = cfg!(windows);
+  let menu_options = state.db.context_menu_options();
 
   SettingsResponse {
-    context_menu: SettingState { supported, enabled: context_menu::is_registered() },
+    context_menu: SettingState { supported, enabled: context_menu::is_registered(&menu_options) },
+    context_menu_options: menu_options
+      .iter()
+      .map(|setting| MenuOptionDto {
+        id: setting.option.id(),
+        label: setting.option.submenu_label(),
+        single_label: setting.option.single_label(),
+        description: setting.option.description(),
+        enabled: setting.enabled,
+      })
+      .collect(),
     run_on_startup: SettingState { supported, enabled: startup::is_enabled() },
     url_base: state.db.url_base(),
+    ignore_patterns: state.db.ignore_patterns(),
+    respect_gitignore: state.db.respect_gitignore(),
   }
 }
 
@@ -475,8 +638,34 @@ pub async fn api_update_settings_handler(
     .transpose()
     .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
 
+  let ignore_patterns = update.ignore_patterns.as_deref().map(normalize_patterns);
+  for pattern in ignore_patterns.iter().flatten() {
+    validate_pattern(pattern)
+      .map_err(|message| (StatusCode::BAD_REQUEST, format!("'{pattern}' isn't a valid pattern: {message}")))?;
+  }
+
+  let menu_options = update
+    .context_menu_options
+    .as_deref()
+    .map(parse_menu_options)
+    .transpose()
+    .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+
+  if let Some(options) = &menu_options {
+    let was_registered = context_menu::is_registered(&state.db.context_menu_options());
+    state.db.set_context_menu_options(options).map_err(item_error)?;
+
+    if was_registered && update.context_menu != Some(false) {
+      context_menu::register(options).map_err(settings_error)?;
+    }
+  }
+
   if let Some(enabled) = update.context_menu {
-    let result = if enabled { context_menu::register() } else { context_menu::unregister() };
+    let result = if enabled {
+      context_menu::register(&state.db.context_menu_options())
+    } else {
+      context_menu::unregister()
+    };
     result.map_err(settings_error)?;
   }
 
@@ -488,6 +677,16 @@ pub async fn api_update_settings_handler(
   if let Some(url_base) = url_base {
     state.db.set_url_base(&url_base).map_err(item_error)?;
   }
+
+  if let Some(patterns) = ignore_patterns {
+    state.db.set_ignore_patterns(&patterns).map_err(item_error)?;
+  }
+
+  if let Some(enabled) = update.respect_gitignore {
+    state.db.set_respect_gitignore(enabled).map_err(item_error)?;
+  }
+
+  state.reload_ignore_rules();
 
   Ok(Json(current_settings(&state)))
 }

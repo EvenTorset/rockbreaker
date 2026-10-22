@@ -55,7 +55,7 @@ async function save() {
 <template>
   <Tooltip>
     <template #trigger="{ props }">
-      <IconButton v-bind="props" @click="show">
+      <IconButton v-bind="props" class="accent" @click="show">
         <LinkEdit16Filled />
       </IconButton>
     </template>
@@ -72,7 +72,7 @@ async function save() {
   >
     <Col align="stretch" gap="12px">
       <p>
-        The links to this item will use the new ID. Links that use the current one stop working.
+        The links to this item will use the new ID. Links that use the current one will stop working.
       </p>
       <NInput
         v-model:value="newId"

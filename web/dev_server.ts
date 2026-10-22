@@ -84,6 +84,6 @@ app.use('/\\!/web', (req, res, next) => {
 })
 
 app.get('/', serveApp)
-app.get(/^\/[a-zA-Z0-9_-]+$/, serveApp)
+app.get(/^\/[a-zA-Z0-9_-]+(\/.*)?$/, serveApp)
 
 app.listen(5173)

@@ -65,8 +65,8 @@ impl SelectionBatcher {
 
       if let Some(batch) = finished {
         let reply = register_item(&state, batch.paths, direct, None);
-        for waiter in batch.waiters {
-          let _ = waiter.send(reply.clone());
+        for (index, waiter) in batch.waiters.into_iter().enumerate() {
+          let _ = waiter.send(reply.clone().map(|response| RegisterResponse { primary: index == 0, ..response }));
         }
       }
     });

@@ -1,9 +1,12 @@
 use axum::{
   body::Body,
+  extract::State,
   http::{header, HeaderValue, StatusCode, Uri},
   response::{IntoResponse, Response},
 };
 use rust_embed::RustEmbed;
+
+use crate::{embed::add_preview, state::AppState};
 
 const WEB_PREFIX: &str = "/!/web/";
 
@@ -24,7 +27,7 @@ fn asset_response(path: &str) -> Option<Response> {
   )
 }
 
-pub async fn spa_fallback_handler(uri: Uri) -> Response {
+pub async fn spa_fallback_handler(State(state): State<AppState>, uri: Uri) -> Response {
   let path = uri.path();
 
   if let Some(asset) = path.strip_prefix(WEB_PREFIX) {
@@ -35,11 +38,15 @@ pub async fn spa_fallback_handler(uri: Uri) -> Response {
     return (StatusCode::NOT_FOUND, "Not found.").into_response();
   }
 
-  if let Some(mut response) = asset_response("index.html") {
-    response
-      .headers_mut()
-      .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));
-    return response;
+  if let Some(index) = EmbeddedAssets::get("index.html") {
+    let html = String::from_utf8_lossy(&index.data).into_owned();
+    let html = add_preview(&state, path, html).await;
+
+    return (
+      [(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"))],
+      Body::from(html),
+    )
+      .into_response();
   }
 
   (StatusCode::NOT_FOUND, "Frontend assets not found.").into_response()

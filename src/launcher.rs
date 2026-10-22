@@ -8,7 +8,7 @@ use std::{
 use arboard::Clipboard;
 
 use crate::{
-  cli::Command,
+  cli::{AfterSharing, Command},
   client::{host_status, register_paths, HostStatus},
   config::Config,
   db,
@@ -31,13 +31,13 @@ pub fn run(command: Command, config: Config) -> Result<(), String> {
         open_dashboard(&config, &token)
       }
       Command::Background => ensure_host_running(&config).await.map(drop),
-      Command::Share { paths, direct, id, selection } => {
+      Command::Share { paths, after, id, selection } => {
         let targets = paths
           .iter()
           .map(|path| dunce::canonicalize(path).map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e)))
           .collect::<Result<Vec<_>, _>>()?;
         let token = ensure_host_running(&config).await?;
-        share(&config, &token, &targets, direct, id.as_deref(), selection).await
+        share(&config, &token, &targets, after, id.as_deref(), selection).await
       }
       Command::Register | Command::Unregister | Command::Help | Command::Host => {
         unreachable!("handled before the launcher runs")
@@ -122,13 +122,20 @@ async fn share(
   config: &Config,
   token: &str,
   targets: &[PathBuf],
-  direct: bool,
+  after: AfterSharing,
   id: Option<&str>,
   selection: bool,
 ) -> Result<(), String> {
+  let direct = after == AfterSharing::CopyDirectLink;
   let response = register_paths(config, token, targets, direct, id, selection).await?;
 
-  Clipboard::new()
-    .and_then(|mut clipboard| clipboard.set_text(&response.share_url))
-    .map_err(|e| format!("Could not copy the share link to the clipboard: {e}\n\nShare link: {}", response.share_url))
+  match after {
+    AfterSharing::CopyShareLink | AfterSharing::CopyDirectLink => Clipboard::new()
+      .and_then(|mut clipboard| clipboard.set_text(&response.share_url))
+      .map_err(|e| format!("Could not copy the share link to the clipboard: {e}\n\nShare link: {}", response.share_url)),
+    AfterSharing::Nothing => Ok(()),
+    AfterSharing::OpenShareLink if !response.primary => Ok(()),
+    AfterSharing::OpenShareLink => open::that_detached(&response.share_url)
+      .map_err(|e| format!("Could not open the share link in a browser: {e}\n\nShare link: {}", response.share_url)),
+  }
 }

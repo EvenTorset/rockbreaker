@@ -6,12 +6,14 @@ It's built to be used with [Cloudflare Tunnel](https://developers.cloudflare.com
 
 ## Features
 
-- **Share anything**: single files, folders, or a multi-selection that is shared together as one item.
-- **Two kinds of links**: a *share link* to a web page with a preview and download button, or a *direct download link* that starts downloading right away.
-- **Context menu integration** (Windows): adds "Share with Rockbreaker..." to the right-click menu of files and folders.
-- **Dashboard**: a web UI for managing everything you're sharing. Rename an item's ID, copy its links, or stop sharing it.
-- **Runs quietly in the background** with a system tray icon, and can optionally start when you log in (Windows).
-- **Command line support** for scripting and for use on platforms without a context menu integration.
+- **Share anything**: Both files and folders can be shared, no matter their size.
+- **Background process**: It runs quietly in the background, using no CPU and less than 1 MB of memory while idle.
+- **Persistence**: Shared items stay shared for as long as Rockbreaker is running, and it will remember shared items when closed and reopened. You can manually stop sharing items through the dashboard.
+- **Dashboard**: It has a web UI for editing app settings and managing everything you are sharing. This allows you to see everything shared, edit their IDs, copy their links, and stop sharing.
+- **Context menu integration** (Windows): There are settings to enable and customize a context menu option for files and folders in Windows Explorer. This allows you to simply right-click anything you want to share and copy a link to it.
+- **Command line support**: For scripting and for use on platforms without a context menu integration, it has full support for use through its CLI.
+- **Previews**: The share links for folders allow you to navigate the entire folder structure in your browser. Most common image, video, and audio file formats can be viewed/listened to directly in the browser. Markdown files can be viewed as rendered or in their raw text form.
+- **Discord Embeds**: Links to shared files will show a rich embed in Discord. Images, videos, and small Markdown files will embed directly, allowing you to see them without leaving Discord.
 
 ## Getting started
 
@@ -29,6 +31,10 @@ If you enabled the context menu in Settings, right-click any file or folder (or 
 
 - **Copy share link** copies a link to a page where the recipient can preview and download what you shared.
 - **Copy direct download link** copies a link that downloads immediately, skipping the page.
+- **Share** shares it without copying anything. It can be found in the dashboard.
+- **Share and open** shares it and opens the link to the page in a browser, without copying the link.
+
+Under Settings you can turn any of these off and put them in the order you want.
 
 You can also share from the command line:
 
@@ -40,6 +46,10 @@ rockbreaker [options] <path>...
 | --- | --- |
 | `--id <id>` | Host the item at a specific ID instead of a random one (letters, numbers, `_` and `-`). |
 | `--direct` | Copy the direct download link instead of the share page link. |
+| `--no-copy` | Don't copy anything. |
+| `--open` | Open the share page link in a browser instead of copying it. |
+
+`--direct`, `--no-copy` and `--open` can't be combined.
 
 Other commands:
 
@@ -68,10 +78,16 @@ Where the files live:
 
 |  | Windows | Linux / macOS |
 | --- | --- | --- |
-| Config | Next to the executable | `<config dir>/rockbreaker/rockbreaker.config.toml` |
+| Config | Next to the executable (`rockbreaker.config.toml`) | `<config dir>/rockbreaker/rockbreaker.config.toml` |
 | Database | Next to the executable (`rockbreaker.db`) | `<local data dir>/rockbreaker/rockbreaker.db` |
 
-Settings like the URL base, the context menu, and run on startup are managed from the dashboard's Settings tab rather than the config file.
+Settings like the URL base, the context menu, run on startup, and ignored files are managed from the dashboard's Settings tab rather than the config file.
+
+### Ignoring files
+
+Files and folders found *inside* of a shared folder can be left out. Under Settings in the dashboard there's a global ignore list (written like the lines of a `.gitignore` file, so `node_modules`, `*.log`, `/build` and `!keep.log` all work) and a switch for following the `.gitignore` files in the shared folder, which is on by default. Only the `.gitignore` files from the shared folder down are looked at, never the ones above it.
+
+The host enforces this, not the web page: ignored entries aren't listed, can't be opened or downloaded by guessing their URL, and are left out of ZIPs. Something that is shared directly is always shared, even if it matches an ignore pattern.
 
 ## Security
 
@@ -82,8 +98,6 @@ Please read this before exposing Rockbreaker to the internet.
 If the token is ever leaked, open **Settings** in the dashboard and click **Generate new token**. The old token stops working immediately.
 
 **Symlinks.** By default, Rockbreaker refuses to serve shared symlinks that point outside of what you've shared. You can allow this with `allow_external_symlinks` in the config file, but doing so can expose files you never meant to share, so it's best left off.
-
-**Network exposure.** Rockbreaker listens on all network interfaces on the configured port. If you use a tunnel, make sure you understand what it exposes, and consider firewalling the port from your local network if you don't want it reachable there.
 
 ## Building from source
 
@@ -108,6 +122,10 @@ npm run dev
 ```
 
 To be able to use the host functions in the dev server-hosted UI, you need to get the token from the database and pass it to the dashboard through the `token` query parameter, e.g. `http://localhost:5173/?token=abcDEF0123...`
+
+### Adding a file preview
+
+The page for a shared file previews it with the first *viewer* that accepts it. Viewers live in `web/src/viewers/modules/`, one folder each, and are picked up automatically. To add one, create `modules/<name>/index.ts` that default-exports `defineViewer({ id, test, load })` and a Vue component for it. `test` gets the file's name, extension and size, and `readSlice(start, end)` to look at its bytes (for magic numbers and so on). `load` imports the component, which gets the file as its `file` prop. A viewer can also provide `metadata(file)`, which returns extra details (like the dimensions of an image) to add to the line under the file's name. Viewers are tried from the highest `priority` to the lowest.
 
 ## Platform support
 

@@ -23,13 +23,13 @@ use tray_icon::{
 use crate::{
   api::{
     api_dashboard_handler, api_item_root_detail_handler, api_item_subpath_detail_handler, api_regenerate_token_handler,
-    api_register_handler, api_rename_handler, api_settings_handler, api_stop_handler, api_update_settings_handler,
+    api_register_handler, api_rename_handler, api_reveal_handler, api_search_root_handler, api_search_subpath_handler, api_settings_handler, api_stop_handler, api_update_settings_handler,
   },
   assets::spa_fallback_handler,
   config::Config,
   db::Database,
   paths::db_file_path,
-  raw::{raw_item_root_handler, raw_item_subpath_handler},
+  raw::{raw_item_root_handler, raw_item_subpath_handler, zip_paths_handler},
   selection::SelectionBatcher,
   state::AppState,
   ui,
@@ -51,9 +51,13 @@ fn build_app(state: AppState) -> NormalizePath<Router> {
     .route("/!/api/token/regenerate", post(api_regenerate_token_handler))
     .route("/!/api/item/:host_id", get(api_item_root_detail_handler))
     .route("/!/api/item/:host_id/*subpath", get(api_item_subpath_detail_handler))
+    .route("/!/api/search/:host_id", get(api_search_root_handler))
+    .route("/!/api/search/:host_id/*subpath", get(api_search_subpath_handler))
     .route("/!/api/register", post(api_register_handler))
     .route("/!/api/stop/:host_id", post(api_stop_handler))
     .route("/!/api/rename/:host_id", post(api_rename_handler))
+    .route("/!/api/reveal/:host_id", post(api_reveal_handler))
+    .route("/!/api/zip/:host_id", post(zip_paths_handler))
     .route("/!/raw/:host_id", get(raw_item_root_handler))
     .route("/!/raw/:host_id/*subpath", get(raw_item_subpath_handler))
     .fallback(spa_fallback_handler)
@@ -117,11 +121,7 @@ pub fn run(config: Config) -> ! {
     println!("Warning: allow_external_symlinks is on. Symlinks may expose files outside of shared directories.");
   }
 
-  let app = build_app(AppState {
-    config: config.clone(),
-    db: db.clone(),
-    selections: Arc::new(SelectionBatcher::default()),
-  });
+  let app = build_app(AppState::new(config.clone(), db.clone(), Arc::new(SelectionBatcher::default())));
 
   let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
 

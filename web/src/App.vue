@@ -26,6 +26,8 @@ function genNaiveTheme(): GlobalThemeOverrides {
     },
     Input: {
       border: '1px solid var(--color-2)',
+      placeholderColor: 'var(--color-4)',
+      iconColor: 'var(--color-4)',
     },
     Split: {
       resizableTriggerColor: 'color-mix(in oklch, var(--color-1), var(--color-2))',
@@ -67,6 +69,15 @@ function genNaiveTheme(): GlobalThemeOverrides {
     Switch: {
       railColor: getCSSVar('--color-2'),
     },
+    Breadcrumb: {
+      itemTextColor: getCSSVar('--color-4'),
+      itemTextColorHover: getCSSVar('--color-6'),
+      itemTextColorPressed: getCSSVar('--color-6'),
+      itemTextColorActive: getCSSVar('--color-6'),
+      itemColorHover: 'rgb(from var(--color-accent) r g b / 0.15)',
+      itemColorPressed: 'rgb(from var(--color-accent) r g b / 0.25)',
+      separatorColor: getCSSVar('--color-3'),
+    },
     Table: {
       tdColor: getCSSVar('--color-0-alt'),
       thColor: getCSSVar('--color-1'),
@@ -84,7 +95,7 @@ const naiveThemeOverrides = ref<GlobalThemeOverrides>(genNaiveTheme())
     :theme="darkTheme"
     :theme-overrides="naiveThemeOverrides"
   >
-    <NNotificationProvider placement="bottom-right">
+    <NNotificationProvider placement="bottom-right" :container-style="{ bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }">
       <NotifyProvider>
         <div class="app-container">
           <header class="app-header">
@@ -107,9 +118,9 @@ const naiveThemeOverrides = ref<GlobalThemeOverrides>(genNaiveTheme())
 
 .app-container {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 2rem 1.5rem calc(6rem + env(safe-area-inset-bottom, 0px));
 }
 
 .app-header {

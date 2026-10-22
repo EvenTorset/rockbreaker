@@ -2,6 +2,7 @@ use std::{
   fs::{self, File},
   io::{self, Seek, Write},
   path::{Path, PathBuf},
+  sync::Arc,
 };
 
 use axum::body::{Body, Bytes};
@@ -9,7 +10,10 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
-use crate::resolve::resolve_entry;
+use crate::{
+  ignore_rules::{IgnoreRules, Scope},
+  resolve::resolve_entry,
+};
 
 const ZIP_CHUNK_SIZE: usize = 64 * 1024;
 
@@ -48,27 +52,40 @@ impl Write for ChannelWriter {
   }
 }
 
+pub struct ZipEntry {
+  pub name: String,
+  pub path: PathBuf,
+  pub root: PathBuf,
+  pub scope: Scope,
+}
+
 enum ZipSource {
-  Directory { dir: PathBuf, root: PathBuf },
-  Collection(Vec<(String, PathBuf)>),
+  Directory { dir: PathBuf, root: PathBuf, scope: Scope },
+  Collection(Vec<ZipEntry>),
 }
 
-pub fn stream_directory_zip(dir_path: PathBuf, root: PathBuf, allow_external: bool) -> Body {
-  stream_zip(ZipSource::Directory { dir: dir_path, root }, allow_external)
+pub fn stream_directory_zip(
+  dir_path: PathBuf,
+  root: PathBuf,
+  scope: Scope,
+  allow_external: bool,
+  rules: Arc<IgnoreRules>,
+) -> Body {
+  stream_zip(ZipSource::Directory { dir: dir_path, root, scope }, allow_external, rules)
 }
 
-pub fn stream_collection_zip(entries: Vec<(String, PathBuf)>, allow_external: bool) -> Body {
-  stream_zip(ZipSource::Collection(entries), allow_external)
+pub fn stream_collection_zip(entries: Vec<ZipEntry>, allow_external: bool, rules: Arc<IgnoreRules>) -> Body {
+  stream_zip(ZipSource::Collection(entries), allow_external, rules)
 }
 
-fn stream_zip(source: ZipSource, allow_external: bool) -> Body {
+fn stream_zip(source: ZipSource, allow_external: bool, rules: Arc<IgnoreRules>) -> Body {
   let (tx, rx) = mpsc::channel::<ZipChunk>(8);
 
   tokio::task::spawn_blocking(move || {
     let error_tx = tx.clone();
     let sink = ChannelWriter { tx, buffer: Vec::with_capacity(ZIP_CHUNK_SIZE) };
 
-    if let Err(error) = write_zip(sink, &source, allow_external) {
+    if let Err(error) = write_zip(sink, &source, allow_external, &rules) {
       if error.kind() != io::ErrorKind::BrokenPipe {
         eprintln!("[ZIP] Failed to build an archive: {}", error);
       }
@@ -83,30 +100,31 @@ fn stream_zip(source: ZipSource, allow_external: bool) -> Body {
 struct ZipContext<'a> {
   root: &'a Path,
   allow_external: bool,
+  rules: &'a IgnoreRules,
 }
 
-fn write_zip(sink: ChannelWriter, source: &ZipSource, allow_external: bool) -> io::Result<()> {
+fn write_zip(sink: ChannelWriter, source: &ZipSource, allow_external: bool, rules: &IgnoreRules) -> io::Result<()> {
   let mut zip = ZipWriter::new_stream(sink);
 
   match source {
-    ZipSource::Directory { dir, root } => {
-      let context = ZipContext { root, allow_external };
+    ZipSource::Directory { dir, root, scope } => {
+      let context = ZipContext { root, allow_external, rules };
       let mut ancestors = vec![dir.clone()];
-      add_directory(&mut zip, &context, dir, "", &mut ancestors)?;
+      add_directory(&mut zip, &context, dir, "", &mut ancestors, scope)?;
     }
     ZipSource::Collection(entries) => {
-      for (name, path) in entries {
+      for ZipEntry { name, path, root, scope } in entries {
         let Ok(metadata) = fs::metadata(path) else {
           continue;
         };
 
         if metadata.is_dir() {
-          let context = ZipContext { root: path, allow_external };
+          let context = ZipContext { root, allow_external, rules };
           let child_prefix = format!("{name}/");
           start_directory(&mut zip, &child_prefix)?;
 
           let mut ancestors = vec![path.clone()];
-          add_directory(&mut zip, &context, path, &child_prefix, &mut ancestors)?;
+          add_directory(&mut zip, &context, path, &child_prefix, &mut ancestors, scope)?;
         } else {
           add_file(&mut zip, name.clone(), path, &metadata)?;
         }
@@ -147,6 +165,7 @@ fn add_directory<W: Write + Seek>(
   dir: &Path,
   prefix: &str,
   ancestors: &mut Vec<PathBuf>,
+  scope: &Scope,
 ) -> io::Result<()> {
   let mut entries: Vec<fs::DirEntry> = fs::read_dir(dir)?.flatten().collect();
   entries.sort_by_key(|entry| entry.file_name());
@@ -155,6 +174,9 @@ fn add_directory<W: Write + Seek>(
     let Some(resolved) = resolve_entry(context.root, &entry, context.allow_external) else {
       continue;
     };
+    if scope.is_ignored(&entry.file_name(), resolved.metadata.is_dir()) {
+      continue;
+    }
     let name = format!("{prefix}{}", entry.file_name().to_string_lossy());
 
     if resolved.metadata.is_dir() {
@@ -165,8 +187,9 @@ fn add_directory<W: Write + Seek>(
       let child_prefix = format!("{name}/");
       start_directory(zip, &child_prefix)?;
 
+      let child_scope = context.rules.enter(scope, &entry.path(), &entry.file_name());
       ancestors.push(resolved.path.clone());
-      add_directory(zip, context, &resolved.path, &child_prefix, ancestors)?;
+      add_directory(zip, context, &resolved.path, &child_prefix, ancestors, &child_scope)?;
       ancestors.pop();
     } else {
       add_file(zip, name, &resolved.path, &resolved.metadata)?;

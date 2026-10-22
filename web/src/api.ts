@@ -1,3 +1,4 @@
+import { encodePath } from '@/util/urls'
 import { getHostToken, setHostToken } from '@/util/hostToken'
 
 export type ItemKind = 'file' | 'directory' | 'collection'
@@ -8,6 +9,7 @@ export interface DashboardItem {
   paths: string[]
   share_url: string
   direct_url: string
+  shared_at: number | null
 }
 
 export interface SettingState {
@@ -15,22 +17,37 @@ export interface SettingState {
   enabled: boolean
 }
 
+export interface ContextMenuOption {
+  id: string
+  label: string
+  single_label: string
+  description: string
+  enabled: boolean
+}
+
 export interface Settings {
   context_menu: SettingState
+  context_menu_options: ContextMenuOption[]
   run_on_startup: SettingState
   url_base: string
+  ignore_patterns: string[]
+  respect_gitignore: boolean
 }
 
 export type SettingsUpdate = Partial<{
   context_menu: boolean
+  context_menu_options: { id: string, enabled: boolean }[]
   run_on_startup: boolean
   url_base: string
+  ignore_patterns: string[]
+  respect_gitignore: boolean
 }>
 
 export interface DirectoryEntry {
   name: string
   is_dir: boolean
-  size: string
+  size: number | null
+  modified: number | null
   subpath: string
 }
 
@@ -42,7 +59,8 @@ export interface ItemDetail {
   file_name: string
   is_dir: boolean
   is_host: boolean
-  file_size: string
+  file_size: number | null
+  modified: number | null
   subpath: string
   parent_subpath: string | null
   entries?: DirectoryEntry[]
@@ -103,9 +121,31 @@ export async function fetchItem(path: string): Promise<ItemDetail> {
   }
 }
 
+export interface SearchResult {
+  entries: DirectoryEntry[]
+  truncated: boolean
+}
+
+export async function searchDirectory(
+  id: string,
+  subpath: string,
+  query: string,
+  signal: AbortSignal,
+): Promise<SearchResult> {
+  const path = subpath ? `/${encodePath(subpath)}` : ''
+  const res = await request(`/!/api/search/${id}${path}?q=${encodeURIComponent(query)}`, { signal }, 'Could not search.')
+  if (!res.ok) throw new Error('Searching failed.')
+  return await res.json()
+}
+
 export async function stopHosting(id: string): Promise<void> {
   const res = await request(`/!/api/stop/${id}`, { method: 'POST' }, 'Error connecting to host server.')
   if (!res.ok) throw await failure(res, 'Failed to stop sharing.')
+}
+
+export async function revealHosting(id: string): Promise<void> {
+  const res = await request(`/!/api/reveal/${id}`, { method: 'POST' }, 'Error connecting to host server.')
+  if (!res.ok) throw await failure(res, 'Failed to show the item in the file explorer.')
 }
 
 export async function renameHosting(id: string, newId: string): Promise<void> {

@@ -1,13 +1,14 @@
 use std::{
   fmt,
   path::{Path, PathBuf},
-  sync::Arc,
+  sync::{Arc, Mutex},
+  time::{SystemTime, UNIX_EPOCH},
 };
 
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use rand::{distributions::Alphanumeric, Rng};
 
-use crate::{config::Config, db::Database, selection::SelectionBatcher};
+use crate::{config::Config, db::Database, ignore_rules::IgnoreRules, selection::SelectionBatcher};
 
 pub const DEFAULT_URL_BASE: &str = "http://localhost";
 
@@ -58,7 +59,12 @@ impl ItemSource {
   }
 }
 
-/// What an entry is called when shared. Drive roots and the like have no file name.
+pub fn now_millis() -> i64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map_or(0, |since_epoch| since_epoch.as_millis() as i64)
+}
+
 pub fn entry_name(path: &Path) -> String {
   path
     .file_name()
@@ -70,10 +76,10 @@ pub fn entry_name(path: &Path) -> String {
 pub struct HostedItem {
   pub id: String,
   pub source: ItemSource,
+  pub shared_at: Option<i64>,
 }
 
 impl HostedItem {
-  /// The name of a shared file or folder. A collection doesn't have one.
   pub fn root_name(&self) -> Option<String> {
     match &self.source {
       ItemSource::File(path) | ItemSource::Directory(path) => Some(entry_name(path)),
@@ -171,4 +177,20 @@ pub struct AppState {
   pub config: Config,
   pub db: Arc<Database>,
   pub selections: Arc<SelectionBatcher>,
+  ignore: Arc<Mutex<Arc<IgnoreRules>>>,
+}
+
+impl AppState {
+  pub fn new(config: Config, db: Arc<Database>, selections: Arc<SelectionBatcher>) -> Self {
+    let ignore = Arc::new(Mutex::new(Arc::new(db.ignore_rules())));
+    Self { config, db, selections, ignore }
+  }
+
+  pub fn ignore_rules(&self) -> Arc<IgnoreRules> {
+    self.ignore.lock().unwrap().clone()
+  }
+
+  pub fn reload_ignore_rules(&self) {
+    *self.ignore.lock().unwrap() = Arc::new(self.db.ignore_rules());
+  }
 }

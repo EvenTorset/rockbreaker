@@ -142,6 +142,13 @@ h3 {
   }
 }
 
+html.marquee-selecting,
+html.marquee-selecting * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: default !important;
+}
+
 /* MARK: Naive UI */
 
 body {
@@ -311,11 +318,6 @@ body {
 .n-checkbox-box {
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
-}
-
-.n-radio__dot-wrapper + .n-radio__label,
-.n-checkbox-box-wrapper + .n-checkbox__label {
-  padding-left: 0;
 }
 
 .n-base-selection,
@@ -688,6 +690,15 @@ body {
 
   :root.light-color-scheme & {
     box-shadow: 0 4px 16px #0002;
+  }
+}
+
+.n-breadcrumb .n-breadcrumb-item .n-breadcrumb-item__link {
+  padding: 0;
+
+  &>* {
+    padding: 4px;
+    line-height: 1;
   }
 }
 
